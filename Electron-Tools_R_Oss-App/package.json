@@ -1,7 +1,7 @@
 {
   "name": "electron-tools_r_oss-app",
   "productName": "electron-tools_r_oss-app",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "My Electron application description",
   "main": ".vite/build/main.js",
   "private": true,
@@ -27,6 +27,7 @@
     "@electron-forge/plugin-auto-unpack-natives": "7.11.0",
     "@electron-forge/plugin-fuses": "7.11.0",
     "@electron-forge/plugin-vite": "7.11.0",
+    "@electron-forge/publisher-github": "^7.11.1",
     "@electron/fuses": "1.8.0",
     "@types/cors": "^2.8.19",
     "@types/electron-squirrel-startup": "^1.0.2",
@@ -42,6 +43,7 @@
   "dependencies": {
     "cors": "^2.8.6",
     "electron-squirrel-startup": "^1.0.1",
+    "electron-updater": "^6.8.3",
     "express": "^4.22.1",
     "puppeteer": "^24.34.0"
   }

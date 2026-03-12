@@ -1,4 +1,6 @@
-import { app, BrowserWindow, Menu } from 'electron';
+import { app, BrowserWindow, Menu, dialog } from 'electron';
+import { autoUpdater } from 'electron-updater';
+
 import path from 'node:path';
 import started from 'electron-squirrel-startup';
 import { startLocalScraperServer } from './localScraperServer';
@@ -16,6 +18,7 @@ const createWindow = () => {
     width: 800,
     height: 600,
     resizable: false,
+    icon: path.join(__dirname, 'icon.ico'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
     },
@@ -30,8 +33,16 @@ const createWindow = () => {
     );
   }
 
-  // Open the DevTools.
-  mainWindow.webContents.openDevTools();
+  // Optionally, block common DevTools shortcuts in production
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    const isDevToolsShortcut =
+      (input.control || input.meta) &&
+      (input.key.toLowerCase() === 'i' || input.key.toLowerCase() === 'j');
+
+    if (isDevToolsShortcut || input.key === 'F12') {
+      event.preventDefault();
+    }
+  });
 };
 
 // This method will be called when Electron has finished
@@ -40,6 +51,12 @@ const createWindow = () => {
 app.on('ready', () => {
   // Remove default application menus, keep only native window controls
   Menu.setApplicationMenu(null);
+
+  // start your local server, createWindow, etc.
+
+  if (app.isPackaged) {
+    setupAutoUpdates();
+  }
 
   // Start the local HTTP API that proxies to your existing
   // scraper logic (DraftKings / OddsChecker, etc.).
@@ -70,6 +87,31 @@ app.on('activate', () => {
     createWindow();
   }
 });
+function setupAutoUpdates() {
+  // Public GitHub repo, no token needed on clients
+  autoUpdater.setFeedURL({
+    provider: 'github',
+    owner: 'Ablanco1547',
+    repo: 'Tools_R_Oss',    // or whatever the real repo name is
+  });
+
+  autoUpdater.on('update-downloaded', () => {
+    dialog
+      .showMessageBox({
+        type: 'info',
+        title: 'Update available',
+        message: 'A new version has been downloaded. Restart to install now?',
+        buttons: ['Restart', 'Later'],
+      })
+      .then(result => {
+        if (result.response === 0) {
+          autoUpdater.quitAndInstall();
+        }
+      });
+  });
+
+  autoUpdater.checkForUpdatesAndNotify();
+}
 
 // In this file you can include the rest of your app's specific main process
 // code. You can also put them in separate files and import them here.
