@@ -19,25 +19,30 @@
   },
   "license": "MIT",
   "devDependencies": {
-    "@electron-forge/cli": "^7.11.1",
-    "@electron-forge/maker-deb": "^7.11.1",
-    "@electron-forge/maker-rpm": "^7.11.1",
-    "@electron-forge/maker-squirrel": "^7.11.1",
-    "@electron-forge/maker-zip": "^7.11.1",
-    "@electron-forge/plugin-auto-unpack-natives": "^7.11.1",
-    "@electron-forge/plugin-fuses": "^7.11.1",
-    "@electron-forge/plugin-vite": "^7.11.1",
-    "@electron/fuses": "^1.8.0",
+    "@electron-forge/cli": "7.11.0",
+    "@electron-forge/maker-deb": "7.11.0",
+    "@electron-forge/maker-rpm": "7.11.0",
+    "@electron-forge/maker-squirrel": "7.11.0",
+    "@electron-forge/maker-zip": "7.11.0",
+    "@electron-forge/plugin-auto-unpack-natives": "7.11.0",
+    "@electron-forge/plugin-fuses": "7.11.0",
+    "@electron-forge/plugin-vite": "7.11.0",
+    "@electron/fuses": "1.8.0",
+    "@types/cors": "^2.8.19",
     "@types/electron-squirrel-startup": "^1.0.2",
+    "@types/express": "^5.0.6",
     "@typescript-eslint/eslint-plugin": "^5.62.0",
     "@typescript-eslint/parser": "^5.62.0",
     "electron": "40.8.0",
     "eslint": "^8.57.1",
     "eslint-plugin-import": "^2.32.0",
     "typescript": "~4.5.4",
-    "vite": "^5.4.21"
+    "vite": "^7.3.1"
   },
   "dependencies": {
-    "electron-squirrel-startup": "^1.0.1"
+    "cors": "^2.8.6",
+    "electron-squirrel-startup": "^1.0.1",
+    "express": "^4.22.1",
+    "puppeteer": "^24.34.0"
   }
 }
