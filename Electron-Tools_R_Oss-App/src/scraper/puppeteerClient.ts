@@ -8,7 +8,7 @@ export async function runWithPage<T>(job: (page: any) => Promise<T>, launchOptio
 
     const browser = await puppeteer.launch({
         // Use the same env flag semantics as the original project.
-        headless: false,
+        headless: true,
         defaultViewport: { width: 2000, height: 9998 },
         args: ['--no-sandbox', '--disable-setuid-sandbox', ...args],
         ...rest,
