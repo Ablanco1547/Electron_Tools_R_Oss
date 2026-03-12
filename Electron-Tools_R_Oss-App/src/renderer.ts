@@ -28,6 +28,20 @@
 
 import './index.css';
 
-console.log(
-  '👋 This message is being logged by "renderer.ts", included via Vite',
-);
+declare global {
+  interface Window {
+    api?: {
+      getVersion: () => Promise<string>;
+    };
+  }
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  const versionElement = document.getElementById('app-version');
+
+  if (versionElement && window.api?.getVersion) {
+    window.api.getVersion().then(version => {
+      versionElement.textContent = `v${version}`;
+    });
+  }
+});

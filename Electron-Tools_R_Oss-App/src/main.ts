@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, dialog } from 'electron';
+import { app, BrowserWindow, Menu, dialog, ipcMain } from 'electron';
 import { autoUpdater } from 'electron-updater';
 
 import path from 'node:path';
@@ -11,6 +11,9 @@ if (started) {
 }
 
 let stopLocalScraperServer: (() => void) | undefined;
+
+// Expose the current app version to renderer processes via IPC
+ipcMain.handle('get-version', () => app.getVersion());
 
 const createWindow = () => {
   // Create the browser window.
