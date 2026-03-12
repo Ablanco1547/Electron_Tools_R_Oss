@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, Menu } from 'electron';
 import path from 'node:path';
 import started from 'electron-squirrel-startup';
 import { startLocalScraperServer } from './localScraperServer';
@@ -15,6 +15,7 @@ const createWindow = () => {
   const mainWindow = new BrowserWindow({
     width: 800,
     height: 600,
+    resizable: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
     },
@@ -37,6 +38,9 @@ const createWindow = () => {
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 app.on('ready', () => {
+  // Remove default application menus, keep only native window controls
+  Menu.setApplicationMenu(null);
+
   // Start the local HTTP API that proxies to your existing
   // scraper logic (DraftKings / OddsChecker, etc.).
   // Clients can call: POST http://localhost:3675/scraper/scrape
