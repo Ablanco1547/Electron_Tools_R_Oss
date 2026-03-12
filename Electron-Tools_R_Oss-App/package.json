@@ -1,8 +1,8 @@
 {
-  "name": "electron-tools_r_oss-app",
-  "productName": "electron-tools_r_oss-app",
-  "version": "1.0.1",
-  "description": "My Electron application description",
+  "name": "tools_r_oss-app",
+  "productName": "Tools R OSS",
+  "version": "1.0.2",
+  "description": "Tools R OSS is a desktop application ",
   "main": ".vite/build/main.js",
   "private": true,
   "scripts": {
