@@ -1,7 +1,7 @@
 {
   "name": "tools_r_oss_app",
   "productName": "Tools R OSS",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "Tools R OSS is a desktop application ",
   "main": ".vite/build/main.js",
   "private": true,
