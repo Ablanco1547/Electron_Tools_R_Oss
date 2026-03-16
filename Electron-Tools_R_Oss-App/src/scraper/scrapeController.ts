@@ -1,4 +1,7 @@
 import type { Request, Response } from 'express';
+import { app } from 'electron';
+import fs from 'node:fs';
+import path from 'node:path';
 import { runWithPage } from './puppeteerClient';
 import { draftKingsScraper, detectDraftKingsType } from './draftKingsScraper';
 import { exampleSiteScraper } from './exampleScraper';
@@ -35,6 +38,30 @@ const SITE_SCRAPERS: Record<string, any> = {
 const DETECTION_FUNCTIONS: Record<string, any> = {
     'draftkings.com': detectDraftKingsType,
 };
+
+function logErrorToFile(errorInfo: { name: string; message: string; stack: string | null }, context: Record<string, unknown> = {}) {
+    try {
+        const userDataPath = app.getPath('userData');
+        const logsDir = path.join(userDataPath, 'logs');
+        const logFile = path.join(logsDir, 'scraper-errors.log');
+
+        if (!fs.existsSync(logsDir)) {
+            fs.mkdirSync(logsDir, { recursive: true });
+        }
+
+        const entry = {
+            timestamp: new Date().toISOString(),
+            error: errorInfo,
+            context,
+        };
+
+        fs.appendFileSync(logFile, `${JSON.stringify(entry)}\n`, 'utf8');
+    } catch (fileErr) {
+        // As a fallback, still log to console if file logging fails.
+        // eslint-disable-next-line no-console
+        console.error('Failed to write scraper error log file:', fileErr);
+    }
+}
 
 // Express route handler for POST /scraper/scrape
 // Expects body: { url: string, maxOdds: number, order: string, oddsType: string, options?: object }
@@ -197,7 +224,34 @@ export async function scrapeWebsite(req: Request, res: Response) {
 
         return res.json({ data });
     } catch (error: any) {
-        console.error('Error scraping website:', error);
-        return res.status(500).json({ error: 'Failed to scrape website.' });
+        // Option 1 + 4: richer diagnostics and log file for users to send.
+        const errorInfo = {
+            name: error?.name ?? 'Error',
+            message: error?.message ?? String(error),
+            stack: error?.stack ?? null,
+        };
+
+        const context = {
+            url: (req.body as any)?.url,
+            maxOdds: (req.body as any)?.maxOdds,
+            order: (req.body as any)?.order,
+            oddsType: (req.body as any)?.oddsType,
+        };
+
+        // Log structured details to console and to a file under the
+        // app's userData path so users can send you the log.
+        console.error('Error scraping website (detailed):', { errorInfo, context });
+        logErrorToFile(errorInfo, context);
+
+        // Also surface basic details back to the caller so the renderer
+        // can show or log them while still treating this as a 500.
+        return res.status(500).json({
+            error: 'Failed to scrape website.',
+            code: 'SCRAPER_INTERNAL_ERROR',
+            details: {
+                name: errorInfo.name,
+                message: errorInfo.message,
+            },
+        });
     }
 }
