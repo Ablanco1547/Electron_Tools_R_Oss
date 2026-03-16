@@ -1,4 +1,29 @@
 import puppeteer from 'puppeteer';
+import fs from 'node:fs';
+
+function findBrowserExecutable(): string | undefined {
+    // Allow overriding via environment variable if needed.
+    if (process.env.PUPPETEER_EXECUTABLE_PATH) {
+        return process.env.PUPPETEER_EXECUTABLE_PATH;
+    }
+
+    if (process.platform === 'win32') {
+        const candidates = [
+            'C:/Program Files/Google/Chrome/Application/chrome.exe',
+            'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe',
+            'C:/Program Files/Microsoft/Edge/Application/msedge.exe',
+            'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
+        ];
+
+        for (const p of candidates) {
+            if (fs.existsSync(p)) {
+                return p;
+            }
+        }
+    }
+
+    return undefined;
+}
 
 // Lightweight wrapper to run a job with a fresh Puppeteer page.
 // This is adapted from Api_Tools_R_Oss/models/misc/puppeteerClient.js
@@ -6,12 +31,20 @@ import puppeteer from 'puppeteer';
 export async function runWithPage<T>(job: (page: any) => Promise<T>, launchOptions: Record<string, any> = {}): Promise<T> {
     const { args = [], ...rest } = launchOptions;
 
-    // Force Puppeteer to run in headless mode. We keep the
-    // boolean type (to satisfy the current Puppeteer typings)
-    // and rely on the explicit `--headless=new` flag in args
-    // to select the new headless implementation.
+    const executablePath = findBrowserExecutable();
+
+    if (!executablePath) {
+        throw new Error(
+            'No compatible Chrome/Edge browser found on this machine. Please install Google Chrome or Microsoft Edge.',
+        );
+    }
+
+    // Force Puppeteer to run in headless mode and target the
+    // system-installed Chrome/Edge instead of a managed copy
+    // in the Puppeteer cache (which does not exist on end users).
     const browser = await puppeteer.launch({
-        headless: false,
+        headless: true,
+        executablePath,
         defaultViewport: { width: 2000, height: 9998 },
         args: ['--headless=new', '--disable-gpu', '--no-sandbox', '--disable-setuid-sandbox', ...args],
         ...rest,
