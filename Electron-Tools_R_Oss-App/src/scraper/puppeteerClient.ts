@@ -6,11 +6,14 @@ import puppeteer from 'puppeteer';
 export async function runWithPage<T>(job: (page: any) => Promise<T>, launchOptions: Record<string, any> = {}): Promise<T> {
     const { args = [], ...rest } = launchOptions;
 
+    // Force Puppeteer to run in headless mode. We keep the
+    // boolean type (to satisfy the current Puppeteer typings)
+    // and rely on the explicit `--headless=new` flag in args
+    // to select the new headless implementation.
     const browser = await puppeteer.launch({
-        // Use the same env flag semantics as the original project.
         headless: true,
         defaultViewport: { width: 2000, height: 9998 },
-        args: ['--no-sandbox', '--disable-setuid-sandbox', ...args],
+        args: ['--headless=new', '--disable-gpu', '--no-sandbox', '--disable-setuid-sandbox', ...args],
         ...rest,
     });
 
