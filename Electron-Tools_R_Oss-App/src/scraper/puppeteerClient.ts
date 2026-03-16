@@ -11,7 +11,7 @@ export async function runWithPage<T>(job: (page: any) => Promise<T>, launchOptio
     // and rely on the explicit `--headless=new` flag in args
     // to select the new headless implementation.
     const browser = await puppeteer.launch({
-        headless: true,
+        headless: false,
         defaultViewport: { width: 2000, height: 9998 },
         args: ['--headless=new', '--disable-gpu', '--no-sandbox', '--disable-setuid-sandbox', ...args],
         ...rest,
