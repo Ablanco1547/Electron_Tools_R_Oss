@@ -49,6 +49,7 @@ export async function runWithPage<T>(job: (page: any) => Promise<T>, launchOptio
         // Try to reduce obvious automation signals.
         ignoreDefaultArgs: ignoreDefaultArgs ?? ['--enable-automation'],
         args: [
+            '--headless=new',
             '--disable-gpu',
             '--no-sandbox',
             '--disable-setuid-sandbox',
