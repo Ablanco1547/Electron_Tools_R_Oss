@@ -43,7 +43,7 @@ export async function runWithPage<T>(job: (page: any) => Promise<T>, launchOptio
     // system-installed Chrome/Edge instead of a managed copy
     // in the Puppeteer cache (which does not exist on end users).
     const browser = await puppeteer.launch({
-        headless: true,
+        headless: false,
         executablePath,
         defaultViewport: { width: 2000, height: 9998 },
         args: ['--headless=new', '--disable-gpu', '--no-sandbox', '--disable-setuid-sandbox', ...args],
