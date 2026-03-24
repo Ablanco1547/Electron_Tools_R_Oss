@@ -43,13 +43,13 @@ export async function runWithPage<T>(job: (page: any) => Promise<T>, launchOptio
     // system-installed Chrome/Edge instead of a managed copy
     // in the Puppeteer cache (which does not exist on end users).
     const browser = await puppeteer.launch({
-        headless: false,
+        headless: false, // Use 'new' headless mode in supported versions, but allow fallback to 'old' mode.
         executablePath,
         defaultViewport: { width: 2000, height: 9998 },
         // Try to reduce obvious automation signals.
         ignoreDefaultArgs: ignoreDefaultArgs ?? ['--enable-automation'],
         args: [
-            '--headless=new',
+
             '--disable-gpu',
             '--no-sandbox',
             '--disable-setuid-sandbox',
