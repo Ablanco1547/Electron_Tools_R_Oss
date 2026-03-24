@@ -29,7 +29,7 @@ function findBrowserExecutable(): string | undefined {
 // This is adapted from Api_Tools_R_Oss/models/misc/puppeteerClient.js
 // so the Electron app can run the same scraping logic locally.
 export async function runWithPage<T>(job: (page: any) => Promise<T>, launchOptions: Record<string, any> = {}): Promise<T> {
-    const { args = [], ...rest } = launchOptions;
+    const { args = [], ignoreDefaultArgs, ...rest } = launchOptions;
 
     const executablePath = findBrowserExecutable();
 
@@ -46,7 +46,16 @@ export async function runWithPage<T>(job: (page: any) => Promise<T>, launchOptio
         headless: false,
         executablePath,
         defaultViewport: { width: 2000, height: 9998 },
-        args: ['--headless=new', '--disable-gpu', '--no-sandbox', '--disable-setuid-sandbox', ...args],
+        // Try to reduce obvious automation signals.
+        ignoreDefaultArgs: ignoreDefaultArgs ?? ['--enable-automation'],
+        args: [
+            '--headless=new',
+            '--disable-gpu',
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-blink-features=AutomationControlled',
+            ...args,
+        ],
         ...rest,
     });
 
@@ -78,6 +87,7 @@ export async function runWithPage<T>(job: (page: any) => Promise<T>, launchOptio
 
     try {
         return await job(page);
+
     } finally {
         await browser.close();
     }
