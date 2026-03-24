@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { runWithPage } from './puppeteerClient';
 import { draftKingsScraper, detectDraftKingsType } from './draftKingsScraper';
+import { betOnlineScraper, detectBetOnlineType } from './betOnlineScraper';
 import { exampleSiteScraper } from './exampleScraper';
 import { oddsCheckerScraper } from './oddsCheckerScraper';
 
@@ -13,6 +14,14 @@ function getDomain(url: string) {
 
     if (domain.endsWith('.draftkings.com')) {
         domain = 'draftkings.com';
+    }
+
+    if (domain === 'betonline.ag' || domain.endsWith('.betonline.ag')) {
+        domain = 'betonline.ag';
+    }
+
+    if (domain === 'sportsbetting.ag' || domain.endsWith('.sportsbetting.ag')) {
+        domain = 'sportsbetting.ag';
     }
 
     return domain;
@@ -31,12 +40,16 @@ async function scrapeDefault(page: any, { url }: { url: string }) {
 
 const SITE_SCRAPERS: Record<string, any> = {
     'draftkings.com': draftKingsScraper,
+    'betonline.ag': betOnlineScraper,
+    'sportsbetting.ag': betOnlineScraper,
     'example.com': exampleSiteScraper,
     'oddschecker.com': oddsCheckerScraper,
 };
 
 const DETECTION_FUNCTIONS: Record<string, any> = {
     'draftkings.com': detectDraftKingsType,
+    'betonline.ag': detectBetOnlineType,
+    'sportsbetting.ag': detectBetOnlineType,
 };
 
 function logErrorToFile(errorInfo: { name: string; message: string; stack: string | null }, context: Record<string, unknown> = {}) {
@@ -94,6 +107,7 @@ export async function scrapeWebsite(req: Request, res: Response) {
 
         const data = await runWithPage(async (page) => {
             let draftKingsNetworkData: any = null;
+            let betOnlineNetworkData: any = null;
 
             if (domain === 'draftkings.com') {
                 console.log('DraftKings: setting up response listener');
@@ -168,6 +182,129 @@ export async function scrapeWebsite(req: Request, res: Response) {
 
                 page.off('response', responseHandler);
                 console.log('DraftKings: response listener removed');
+            } else if (domain === 'betonline.ag' || domain === 'sportsbetting.ag') {
+                console.log('BetOnline: setting up response listener');
+
+                betOnlineNetworkData = {
+                    contestResponses: [] as any[],
+                };
+
+                const responseHandler = async (response: any) => {
+                    try {
+                        const request = response.request();
+                        const responseUrl = response.url();
+                        const method = request.method();
+
+                        const status = typeof response.status === 'function' ? response.status() : undefined;
+
+                        if (responseUrl.includes('get-contests-by-contest-type2')) {
+                            console.log('BetOnline get-contests-by-contest-type2 response seen:', {
+                                url: responseUrl,
+                                method,
+                                status,
+                            });
+
+                            // The contests API is returning JSON on POST (and may use OPTIONS
+                            // for preflight), so capture any successful 2xx JSON response
+                            // regardless of HTTP method.
+                            if (status && status >= 200 && status < 300) {
+                                const json = await response.json().catch((err: any): null => {
+                                    console.warn('Error parsing BetOnline contests JSON:', err?.message || err);
+                                    return null;
+                                });
+
+                                if (json) {
+                                    betOnlineNetworkData.contestResponses.push({
+                                        url: responseUrl,
+                                        json,
+                                    });
+
+                                    try {
+                                        const summary =
+                                            json && typeof json === 'object'
+                                                ? {
+                                                    rootKeys: Object.keys(json),
+                                                    isArray: Array.isArray(json),
+                                                    length: Array.isArray(json) ? json.length : undefined,
+                                                }
+                                                : { isArray: Array.isArray(json) };
+
+                                        console.log('BetOnline contests response captured', {
+                                            url: responseUrl,
+                                            totalCaptured: betOnlineNetworkData.contestResponses.length,
+                                            summary,
+                                        });
+                                    } catch (logErr: any) {
+                                        console.warn(
+                                            'Error logging BetOnline contests JSON summary:',
+                                            logErr?.message || logErr,
+                                        );
+                                    }
+                                }
+                            }
+                        }
+                    } catch (err: any) {
+                        console.warn('BetOnline response handler error:', err?.message || err);
+                    }
+                };
+
+                console.log('BetOnline: first load', { url });
+                await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
+                console.log('BetOnline: first load done, waiting for network activity');
+                await sleep(4000);
+
+                try {
+                    const currentUrl = page.url();
+                    const title = await page.title();
+                    console.log('BetOnline: after first load page state', { currentUrl, title });
+
+                    if (title && title.toLowerCase().includes('internal error')) {
+                        const html = await page.content();
+                        console.warn('BetOnline: firewall/internal error detected after first load', {
+                            currentUrl,
+                            title,
+                            bodySnippet: String(html).slice(0, 500),
+                        });
+                    }
+                } catch (stateErr: any) {
+                    console.warn('BetOnline: error while logging page state after first load', stateErr?.message || stateErr);
+                }
+
+                // Only start capturing contests API responses after the reload, so that
+                // each contest set is captured once (from the final page state) instead
+                // of duplicating first-load and reload traffic.
+                page.on('response', responseHandler);
+
+                console.log('BetOnline: reloading page');
+                await page
+                    .reload({ waitUntil: 'domcontentloaded', timeout: 60000 })
+                    .catch((err: any) => {
+                        console.warn('BetOnline reload error:', err?.message || err);
+                    });
+                console.log('BetOnline: reload done, waiting for network activity');
+                await sleep(4000);
+
+                try {
+                    const currentUrl = page.url();
+                    const title = await page.title();
+                    console.log('BetOnline: after reload page state', { currentUrl, title });
+
+                    if (title && title.toLowerCase().includes('internal error')) {
+                        const html = await page.content();
+                        console.warn('BetOnline: firewall/internal error detected after reload', {
+                            currentUrl,
+                            title,
+                            bodySnippet: String(html).slice(0, 500),
+                        });
+                    }
+                } catch (stateErr: any) {
+                    console.warn('BetOnline: error while logging page state after reload', stateErr?.message || stateErr);
+                }
+
+                page.off('response', responseHandler);
+                console.log('BetOnline: response listener removed', {
+                    totalContestResponses: betOnlineNetworkData.contestResponses.length,
+                });
             } else {
                 console.log('Generic site: navigating to URL', { url });
 
@@ -185,7 +322,15 @@ export async function scrapeWebsite(req: Request, res: Response) {
             if (siteScraper) {
                 const detectFn = DETECTION_FUNCTIONS[domain];
                 type = detectFn
-                    ? await detectFn(page, { url, maxOdds, order, oddsType, draftKingsNetworkData, options })
+                    ? await detectFn(page, {
+                        url,
+                        maxOdds,
+                        order,
+                        oddsType,
+                        draftKingsNetworkData,
+                        betOnlineNetworkData,
+                        options,
+                    })
                     : Object.keys(siteScraper)[0];
                 console.log('Scraper type detected/selected', { domain, type });
             } else {
@@ -204,6 +349,7 @@ export async function scrapeWebsite(req: Request, res: Response) {
                 order,
                 oddsType,
                 draftKingsNetworkData,
+                betOnlineNetworkData,
                 ...(options as any),
             });
 
@@ -216,6 +362,15 @@ export async function scrapeWebsite(req: Request, res: Response) {
                     });
                 } catch (logErr: any) {
                     console.warn('Error logging DraftKings scraper result summary:', logErr?.message || logErr);
+                }
+            } else if (domain === 'betonline.ag') {
+                try {
+                    console.log('BetOnline scraper result summary:', {
+                        detectedType: type,
+                        totalContestResponses: betOnlineNetworkData?.contestResponses?.length || 0,
+                    });
+                } catch (logErr: any) {
+                    console.warn('Error logging BetOnline scraper result summary:', logErr?.message || logErr);
                 }
             }
 
