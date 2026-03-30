@@ -11,13 +11,25 @@ if (started) {
 }
 
 let stopLocalScraperServer: (() => void) | undefined;
+let mainWindow: BrowserWindow | null = null;
+
+const PROTOCOL = 'toolsross';
+let deeplinkingUrl: string | null = null;
+
+// Capture protocol URL when app is launched via toolsross:// on Windows
+if (process.platform === 'win32') {
+  const urlArg = process.argv.find(arg => arg.startsWith(`${PROTOCOL}://`));
+  if (urlArg) {
+    deeplinkingUrl = urlArg;
+  }
+}
 
 // Expose the current app version to renderer processes via IPC
 ipcMain.handle('get-version', () => app.getVersion());
 
 const createWindow = () => {
   // Create the browser window.
-  const mainWindow = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 800,
     height: 600,
     resizable: false,
@@ -46,29 +58,81 @@ const createWindow = () => {
       event.preventDefault();
     }
   });
+
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+  });
 };
 
-// This method will be called when Electron has finished
-// initialization and is ready to create browser windows.
-// Some APIs can only be used after this event occurs.
-app.on('ready', () => {
-  // Remove default application menus, keep only native window controls
-  Menu.setApplicationMenu(null);
+function handleDeepLink(url: string) {
+  // Example URL: toolsross://scrape?url=...
+  // For now, focus/restore the main window and log the URL.
+  // Later you can parse this and trigger a scrape in your app.
+  // eslint-disable-next-line no-console
+  console.log('Received deep link URL:', url);
 
-  // start your local server, createWindow, etc.
-
-  if (app.isPackaged) {
-    setupAutoUpdates();
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) {
+      mainWindow.restore();
+    }
+    mainWindow.focus();
   }
+}
 
-  // Start the local HTTP API that proxies to your existing
-  // scraper logic (DraftKings / OddsChecker, etc.).
-  // Clients can call: POST http://localhost:3675/scraper/scrape
-  // with the same body your current API expects.
-  stopLocalScraperServer = startLocalScraperServer({ port: 3675 });
+// Ensure a single instance so protocol activations reuse the same app
+const gotTheLock = app.requestSingleInstanceLock();
 
-  createWindow();
-});
+if (!gotTheLock) {
+  app.quit();
+} else {
+  app.on('second-instance', (_event, commandLine) => {
+    const urlArg = commandLine.find(arg => arg.startsWith(`${PROTOCOL}://`));
+    if (urlArg) {
+      deeplinkingUrl = urlArg;
+      handleDeepLink(urlArg);
+    }
+
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) {
+        mainWindow.restore();
+      }
+      mainWindow.focus();
+    }
+  });
+
+  // This method will be called when Electron has finished
+  // initialization and is ready to create browser windows.
+  // Some APIs can only be used after this event occurs.
+  app.on('ready', () => {
+    // Remove default application menus, keep only native window controls
+    Menu.setApplicationMenu(null);
+
+    // Register the custom protocol so toolsross:// links open this app
+    if (!app.isDefaultProtocolClient(PROTOCOL)) {
+      if (process.defaultApp) {
+        app.setAsDefaultProtocolClient(PROTOCOL, process.execPath, [process.argv[1]]);
+      } else {
+        app.setAsDefaultProtocolClient(PROTOCOL);
+      }
+    }
+
+    if (app.isPackaged) {
+      setupAutoUpdates();
+    }
+
+    // Start the local HTTP API that proxies to your existing
+    // scraper logic (DraftKings / OddsChecker, etc.).
+    // Clients can call: POST http://localhost:3675/scraper/scrape
+    // with the same body your current API expects.
+    stopLocalScraperServer = startLocalScraperServer({ port: 3675 });
+
+    createWindow();
+
+    if (deeplinkingUrl) {
+      handleDeepLink(deeplinkingUrl);
+    }
+  });
+}
 
 // Quit when all windows are closed, except on macOS. There, it's common
 // for applications and their menu bar to stay active until the user quits
