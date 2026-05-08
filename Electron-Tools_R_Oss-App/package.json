@@ -1,7 +1,7 @@
 {
   "name": "tools_r_oss_app",
   "productName": "Tools R OSS",
-  "version": "1.0.12",
+  "version": "1.1.1",
   "description": "Tools R OSS is a desktop application ",
   "main": ".vite/build/main.js",
   "private": true,
@@ -10,7 +10,10 @@
     "package": "electron-forge package",
     "make": "electron-forge make",
     "publish": "electron-forge publish",
-    "lint": "eslint --ext .ts,.tsx ."
+    "lint": "eslint --ext .ts,.tsx .",
+    "patch": "npm version patch",
+    "minor": "npm version minor",
+    "major": "npm version major"
   },
   "keywords": [],
   "author": {

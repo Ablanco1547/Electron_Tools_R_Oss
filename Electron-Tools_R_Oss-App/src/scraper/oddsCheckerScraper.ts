@@ -58,48 +58,73 @@ export const oddsCheckerScraper = {
             const currentRow = allRows[index];
             let currentOddsInRow = await currentRow.$$(ODDSCHECKER.SELECTORS.ODDS_CLASS);
 
-            let rowLength = currentOddsInRow.length;
-            let higherOddsTemp = 0;
-            let lowerOddsTemp = 9999999;
-            let averageoddsTemp;
+            let higherOddsTemp: number | null = null;
+            let lowerOddsTemp: number | null = null;
+            let averageOddsTemp;
 
             if (oddsType === 'highest') {
                 for (const oddsElement of currentOddsInRow) {
                     const oddsText = await oddsElement.evaluate((el: any) => el.innerText);
-                    const currentOdds = oddsText !== undefined ? scraperMiscFns.cutToOddsLimit(oddsText, maxOdds) : ' ';
+                    const trimmedOddsText = typeof oddsText === 'string' ? oddsText.trim() : '';
+                    if (trimmedOddsText === '') {
+                        continue;
+                    }
 
-                    if (oddsText !== '') {
-                        higherOddsTemp = scraperMiscFns.higherOdds(currentOdds, higherOddsTemp);
+                    const currentOdds = scraperMiscFns.cutToOddsLimit(trimmedOddsText, maxOdds);
+                    const parsedCurrentOdds = parseInt(String(currentOdds), 10);
+                    if (Number.isNaN(parsedCurrentOdds)) {
+                        continue;
+                    }
+
+                    if (higherOddsTemp === null) {
+                        higherOddsTemp = parsedCurrentOdds;
+                    } else {
+                        higherOddsTemp = scraperMiscFns.higherOdds(parsedCurrentOdds, higherOddsTemp);
                     }
                 }
-                contestant.odds = higherOddsTemp;
+                contestant.odds = higherOddsTemp ?? 0;
             } else if (oddsType === 'lowest') {
                 for (const oddsElement of currentOddsInRow) {
                     const oddsText = await oddsElement.evaluate((el: any) => el.innerText);
-                    const currentOdds = oddsText !== undefined ? scraperMiscFns.cutToOddsLimit(oddsText, maxOdds) : ' ';
+                    const trimmedOddsText = typeof oddsText === 'string' ? oddsText.trim() : '';
+                    if (trimmedOddsText === '') {
+                        continue;
+                    }
 
-                    if (oddsText !== '') {
-                        lowerOddsTemp = scraperMiscFns.lowerOdds(currentOdds, lowerOddsTemp);
+                    const currentOdds = scraperMiscFns.cutToOddsLimit(trimmedOddsText, maxOdds);
+                    const parsedCurrentOdds = parseInt(String(currentOdds), 10);
+                    if (Number.isNaN(parsedCurrentOdds)) {
+                        continue;
+                    }
+
+                    if (lowerOddsTemp === null) {
+                        lowerOddsTemp = parsedCurrentOdds;
+                    } else {
+                        lowerOddsTemp = scraperMiscFns.lowerOdds(parsedCurrentOdds, lowerOddsTemp);
                     }
                 }
-                contestant.Odds = lowerOddsTemp;
+                contestant.odds = lowerOddsTemp ?? 0;
             } else if (oddsType === 'average') {
                 const oddsInTheRow: any[] = [];
                 for (const oddsElement of currentOddsInRow) {
                     const oddsText = await oddsElement.evaluate((el: any) => el.innerText);
-                    const currentOdds = oddsText !== undefined ? scraperMiscFns.cutToOddsLimit(oddsText, maxOdds) : ' ';
+                    const trimmedOddsText = typeof oddsText === 'string' ? oddsText.trim() : '';
+                    if (trimmedOddsText === '') {
+                        continue;
+                    }
 
-                    if (currentOdds === '') {
-                        rowLength = rowLength - 1;
-                    } else {
-                        oddsInTheRow.push(currentOdds);
+                    const currentOdds = scraperMiscFns.cutToOddsLimit(trimmedOddsText, maxOdds);
+                    const parsedCurrentOdds = parseInt(String(currentOdds), 10);
+                    if (!Number.isNaN(parsedCurrentOdds)) {
+                        oddsInTheRow.push(parsedCurrentOdds);
                     }
                 }
 
-                averageoddsTemp = scraperMiscFns.averageOdds(rowLength, oddsInTheRow);
-                const averageoddsTempRounded = scraperMiscFns.roundUp(averageoddsTemp);
+                const rowLength = oddsInTheRow.length;
+                averageOddsTemp = scraperMiscFns.averageOdds(rowLength, oddsInTheRow);
+                const averageOddsTempRounded = scraperMiscFns.roundUp(averageOddsTemp);
 
-                contestant.Odds = averageoddsTempRounded;
+                contestant.odds = averageOddsTempRounded;
             }
             contestantsList.push(contestant);
         }

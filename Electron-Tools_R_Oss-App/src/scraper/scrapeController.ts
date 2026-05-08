@@ -7,6 +7,8 @@ import { draftKingsScraper, detectDraftKingsType } from './draftKingsScraper';
 import { betOnlineScraper, detectBetOnlineType } from './betOnlineScraper';
 import { exampleSiteScraper } from './exampleScraper';
 import { oddsCheckerScraper } from './oddsCheckerScraper';
+import { bet487Scraper, detectBet487Type } from './bet487Scraper';
+import { sports411Scraper, detectSports411Type } from './sports411Scraper';
 
 function getDomain(url: string) {
     const { hostname } = new URL(url);
@@ -22,6 +24,14 @@ function getDomain(url: string) {
 
     if (domain === 'sportsbetting.ag' || domain.endsWith('.sportsbetting.ag')) {
         domain = 'sportsbetting.ag';
+    }
+
+    if (domain === 'bet487.org' || domain.endsWith('.bet487.org')) {
+        domain = 'bet487.org';
+    }
+
+    if (domain === 'sports411.ag' || domain.endsWith('.sports411.ag')) {
+        domain = 'sports411.ag';
     }
 
     return domain;
@@ -42,6 +52,8 @@ const SITE_SCRAPERS: Record<string, any> = {
     'draftkings.com': draftKingsScraper,
     'betonline.ag': betOnlineScraper,
     'sportsbetting.ag': betOnlineScraper,
+    'bet487.org': bet487Scraper,
+    'sports411.ag': sports411Scraper,
     'example.com': exampleSiteScraper,
     'oddschecker.com': oddsCheckerScraper,
 };
@@ -50,6 +62,8 @@ const DETECTION_FUNCTIONS: Record<string, any> = {
     'draftkings.com': detectDraftKingsType,
     'betonline.ag': detectBetOnlineType,
     'sportsbetting.ag': detectBetOnlineType,
+    'bet487.org': detectBet487Type,
+    'sports411.ag': detectSports411Type,
 };
 
 function logErrorToFile(errorInfo: { name: string; message: string; stack: string | null }, context: Record<string, unknown> = {}) {

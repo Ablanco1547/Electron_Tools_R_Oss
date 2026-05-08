@@ -3,6 +3,15 @@
 
 import * as scraperMiscFns from './scraperMiscFunctions';
 
+// Normalize odds by replacing Unicode minus characters with regular hyphen-minus
+function normalizeOdds(oddsValue: any): any {
+    if (typeof oddsValue === 'string') {
+        // Replace various Unicode minus/dash characters with regular hyphen-minus (-)
+        return oddsValue.replace(/[−–—]/g, '-');
+    }
+    return oddsValue;
+}
+
 // Detection function for DraftKings
 // context may include { url, maxOdds, order, oddsType, draftKingsNetworkData, options }
 export async function detectDraftKingsType(page: any, context: any = {}) {
@@ -73,6 +82,7 @@ function buildDirectApiCallPropsFromMarkets(marketsJson: any, { maxOdds, order, 
         const name = (s.name || '').toLowerCase();
         const seo = (s.seoIdentifier || '').toLowerCase();
         return name === 'mma' || seo === 'mma';
+
     });
 
     const selectionsByMarketId = new Map<string, any[]>();
@@ -106,56 +116,121 @@ function buildDirectApiCallPropsFromMarkets(marketsJson: any, { maxOdds, order, 
         }
 
         if (isFightProps) {
-            const contestants: any[] = [];
+            const hasRoundBetting = eventMarkets.some((m: any) => {
+                const name = (m.name ?? m.MarketName ?? m.marketName ?? '').toLowerCase();
+                return name === 'round betting';
+            });
 
-            for (const market of eventMarkets) {
-                const marketName = market.name ?? market.MarketName ?? market.marketName ?? '';
-                const marketId = market.id ?? market.marketId ?? market.MarketId ?? null;
+            if (hasRoundBetting) {
+                // Round Betting: separate contest per market with market name in title
+                for (const market of eventMarkets) {
+                    const marketName = market.name ?? market.MarketName ?? market.marketName ?? '';
+                    const marketId = market.id ?? market.marketId ?? market.MarketId ?? null;
 
-                const marketSelections = (marketId !== null && selectionsByMarketId.get(String(marketId))) || [];
+                    const marketSelections = (marketId !== null && selectionsByMarketId.get(String(marketId))) || [];
 
-                for (const sel of marketSelections) {
-                    const baseName = sel.label ?? sel.name ?? sel.outcomeName ?? sel.description ?? 'Unknown selection';
-                    const name = marketName ? `${baseName} ${marketName}` : baseName;
+                    const contestants: any[] = [];
 
-                    let american: any =
-                        sel.displayOdds?.american ??
-                        sel.displayOdds?.American ??
-                        sel.oddsAmerican ??
-                        sel.americanOdds ??
-                        sel.price?.american ??
-                        sel.price?.American ??
-                        null;
+                    for (const sel of marketSelections) {
+                        const baseName = sel.label ?? sel.name ?? sel.outcomeName ?? sel.description ?? 'Unknown selection';
+                        const name = marketName ? `${baseName} ${marketName}` : baseName;
 
-                    if (american === null || american === undefined) {
-                        continue;
+                        let american: any =
+                            sel.displayOdds?.american ??
+                            sel.displayOdds?.American ??
+                            sel.oddsAmerican ??
+                            sel.americanOdds ??
+                            sel.price?.american ??
+                            sel.price?.American ??
+                            null;
+
+                        if (american === null || american === undefined) {
+                            continue;
+                        }
+
+                        american = normalizeOdds(american);
+
+                        if (typeof maxOdds === 'number') {
+                            const prefixed = Number(american) > 0 ? `+${american}` : String(american);
+                            american = scraperMiscFns.cutToOddsLimit(String(prefixed), maxOdds);
+                        }
+
+                        contestants.push({
+                            name,
+                            odds: String(american),
+                        });
                     }
 
-                    if (typeof maxOdds === 'number') {
-                        const prefixed = Number(american) > 0 ? `+${american}` : String(american);
-                        american = scraperMiscFns.cutToOddsLimit(String(prefixed), maxOdds);
+                    if (contestants.length > 0) {
+                        if (order === 'alph') {
+                            scraperMiscFns.sortAlphObj(contestants);
+                        }
+
+                        for (const c of contestants) {
+                            c.rotation = currentRotation++;
+                        }
+                        contests.push({
+                            title: marketName ? `${eventName} - ${marketName}` : eventName,
+                            subtitle: sportName,
+                            contestants,
+                        });
+                    }
+                }
+            } else {
+                // Non-Round Betting: combine all markets into one contest
+                const contestants: any[] = [];
+
+                for (const market of eventMarkets) {
+                    const marketName = market.name ?? market.MarketName ?? market.marketName ?? '';
+                    const marketId = market.id ?? market.marketId ?? market.MarketId ?? null;
+
+                    const marketSelections = (marketId !== null && selectionsByMarketId.get(String(marketId))) || [];
+
+                    for (const sel of marketSelections) {
+                        const baseName = sel.label ?? sel.name ?? sel.outcomeName ?? sel.description ?? 'Unknown selection';
+                        const name = marketName ? `${baseName} ${marketName}` : baseName;
+
+                        let american: any =
+                            sel.displayOdds?.american ??
+                            sel.displayOdds?.American ??
+                            sel.oddsAmerican ??
+                            sel.americanOdds ??
+                            sel.price?.american ??
+                            sel.price?.American ??
+                            null;
+
+                        if (american === null || american === undefined) {
+                            continue;
+                        }
+
+                        american = normalizeOdds(american);
+
+                        if (typeof maxOdds === 'number') {
+                            const prefixed = Number(american) > 0 ? `+${american}` : String(american);
+                            american = scraperMiscFns.cutToOddsLimit(String(prefixed), maxOdds);
+                        }
+
+                        contestants.push({
+                            name,
+                            odds: String(american),
+                        });
+                    }
+                }
+
+                if (contestants.length > 0) {
+                    if (order === 'alph') {
+                        scraperMiscFns.sortAlphObj(contestants);
                     }
 
-                    contestants.push({
-                        name,
-                        odds: String(american),
+                    for (const c of contestants) {
+                        c.rotation = currentRotation++;
+                    }
+                    contests.push({
+                        title: eventName,
+                        subtitle: sportName,
+                        contestants,
                     });
                 }
-            }
-
-            if (contestants.length > 0) {
-                if (order === 'alph') {
-                    scraperMiscFns.sortAlphObj(contestants);
-                }
-
-                for (const c of contestants) {
-                    c.rotation = currentRotation++;
-                }
-                contests.push({
-                    title: eventName,
-                    subtitle: sportName,
-                    contestants,
-                });
             }
         } else {
             for (const market of eventMarkets) {
@@ -181,6 +256,8 @@ function buildDirectApiCallPropsFromMarkets(marketsJson: any, { maxOdds, order, 
                     if (american === null || american === undefined) {
                         continue;
                     }
+
+                    american = normalizeOdds(american);
 
                     if (typeof maxOdds === 'number') {
                         const prefixed = Number(american) > 0 ? `+${american}` : String(american);

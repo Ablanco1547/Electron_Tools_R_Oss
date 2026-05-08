@@ -6,8 +6,8 @@
 export const ODDSCHECKER = {
     SELECTORS: {
         NAMES_CLASS: '.BetRowLeftBetName_bub5pc2',
-        ODDS_CLASS: '.OddsCellWrapper_oia3vlm',
-        ROWS_CLASS: '.oddsAreaWrapper_ofjd29g',
+        ODDS_CLASS: '.OddsCellDesktop_o1rp6fr8',
+        ROWS_CLASS: '.BetRow_b1y1e6mm',
         COMPARE_ALL_BUTTON: 'button[aria-label="Compare All Odds"]',
         H1: 'h1',
         H2: 'h2',
@@ -34,6 +34,13 @@ export const DRAFTKINGS = {
     },
     TIMEOUTS: {
         PAGE_LOAD: 30000,
+    },
+} as const;
+
+// Sports411 selectors and configs
+export const SPORTS411 = {
+    SELECTORS: {
+        ODDS_TABLE: '.odds-table, .market-table, .event-row',
     },
 } as const;
 
