@@ -17,6 +17,7 @@ interface BulkScrapeRequestBody {
     timeoutMs?: number;
     retryCount?: number;
     csvContent?: string;
+    csvContents?: string[];
     options?: Record<string, unknown>;
 }
 
@@ -227,7 +228,7 @@ function parseCsvLine(line: string): string[] {
     return cells;
 }
 
-function parseCsvToNormalizedObjects(csvContent: string): CsvParseResult {
+function parseCsvToNormalizedObjects(csvContent: string, sourceLabel = 'csv-upload'): CsvParseResult {
     const lines = csvContent
         .replace(/^\uFEFF/, '')
         .split(/\r?\n/)
@@ -282,10 +283,10 @@ function parseCsvToNormalizedObjects(csvContent: string): CsvParseResult {
     }
 
     const objects: NormalizedOddsItem[] = Array.from(groupedByTitle.entries()).map(([title, participants]) => ({
-        website: 'csv',
+        website: sourceLabel,
         title,
         participants,
-        sourceUrl: 'csv-upload',
+        sourceUrl: sourceLabel,
     }));
 
     return { objects, errors };
@@ -437,7 +438,7 @@ export function startLocalScraperServer(options: LocalScraperServerOptions = {})
 
     // New route: scrape one or many links and normalize response to
     // [{ website, title, participants, sourceUrl }].
-    // Optional csvContent can be provided to append CSV-based contests
+    // Optional csvContent/csvContents can be provided to append CSV-based contests
     // in the same shape before aggregate summaries are calculated.
     app.post('/scraper/scrape-links', async (req: Request, res: Response) => {
         const {
@@ -448,6 +449,7 @@ export function startLocalScraperServer(options: LocalScraperServerOptions = {})
             timeoutMs,
             retryCount,
             csvContent,
+            csvContents,
             options = {},
         } = (req.body || {}) as BulkScrapeRequestBody;
 
@@ -457,9 +459,14 @@ export function startLocalScraperServer(options: LocalScraperServerOptions = {})
                 ? [links]
                 : [];
 
-        if (normalizedLinks.length === 0 && (!csvContent || !csvContent.trim())) {
+        const normalizedCsvContents = [
+            ...(Array.isArray(csvContents) ? csvContents : []),
+            ...(typeof csvContent === 'string' ? [csvContent] : []),
+        ].filter((content): content is string => typeof content === 'string' && content.trim().length > 0);
+
+        if (normalizedLinks.length === 0 && normalizedCsvContents.length === 0) {
             return res.status(400).json({
-                error: 'Provide at least one link in "links" or provide non-empty "csvContent".',
+                error: 'Provide at least one link in "links" or provide non-empty "csvContent"/"csvContents".',
             });
         }
 
@@ -557,13 +564,14 @@ export function startLocalScraperServer(options: LocalScraperServerOptions = {})
             }
         }
 
-        if (typeof csvContent === 'string' && csvContent.trim().length > 0) {
-            const csvParseResult = parseCsvToNormalizedObjects(csvContent);
+        for (const [index, csvContentItem] of normalizedCsvContents.entries()) {
+            const csvSourceLabel = `csv-upload-${index + 1}`;
+            const csvParseResult = parseCsvToNormalizedObjects(csvContentItem, csvSourceLabel);
             data.push(...csvParseResult.objects);
 
             for (const csvError of csvParseResult.errors) {
                 errors.push({
-                    url: 'csv-upload',
+                    url: csvSourceLabel,
                     error: csvError,
                 });
             }
