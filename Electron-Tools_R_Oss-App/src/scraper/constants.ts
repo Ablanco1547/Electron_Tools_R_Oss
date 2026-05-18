@@ -6,7 +6,7 @@
 export const ODDSCHECKER = {
     SELECTORS: {
         NAMES_CLASS: '.BetRowLeftBetName_bub5pc2',
-        ODDS_CLASS: '.OddsCellDesktop_o1rp6fr8',
+        ODDS_CLASS: '.OddsCellDesktop_ordu97k',
         ROWS_CLASS: '.BetRow_b1y1e6mm',
         COMPARE_ALL_BUTTON: 'button[aria-label="Compare All Odds"]',
         H1: 'h1',
