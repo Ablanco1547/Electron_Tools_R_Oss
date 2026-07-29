@@ -48,6 +48,26 @@ async function scrapeDefault(page: any, { url }: { url: string }) {
     return { site: 'default', type: 'paragraphs', url, paragraphs };
 }
 
+async function authenticateSports411(page: any, options: any = {}) {
+    const sports411Auth = options?.sports411Auth || {};
+    const username = sports411Auth.username || options?.username || '';
+    const password = sports411Auth.password || options?.password || '';
+
+    if (!username || !password) {
+        return;
+    }
+
+    // TODO: implement the Sports411 login flow here.
+    // Suggested flow:
+    // 1. Navigate to the Sports411 login page or homepage.
+    // 2. Fill the username and password fields.
+    // 3. Submit the form and wait for the authenticated session to settle.
+    // 4. Return once the site is ready for the target contest URL.
+    void page;
+    void username;
+    void password;
+}
+
 const SITE_SCRAPERS: Record<string, any> = {
     'draftkings.com': draftKingsScraper,
     'betonline.ag': betOnlineScraper,
@@ -122,6 +142,7 @@ export async function scrapeWebsite(req: Request, res: Response) {
         const data = await runWithPage(async (page) => {
             let draftKingsNetworkData: any = null;
             let betOnlineNetworkData: any = null;
+            let sports411NetworkData: any = null;
 
             if (domain === 'draftkings.com') {
                 console.log('DraftKings: setting up response listener');
@@ -319,6 +340,79 @@ export async function scrapeWebsite(req: Request, res: Response) {
                 console.log('BetOnline: response listener removed', {
                     totalContestResponses: betOnlineNetworkData.contestResponses.length,
                 });
+            } else if (domain === 'sports411.ag') {
+                console.log('Sports411: setting up response listener');
+
+                let scheduleHandled = false;
+
+                const responseHandler = async (response: any) => {
+                    try {
+                        if (scheduleHandled) return;
+
+                        const request = response.request();
+                        const responseUrl = response.url();
+                        const method = request.method();
+                        const postData = typeof request.postData === 'function' ? request.postData() : '';
+
+                        const matchesScheduleRequest =
+                            responseUrl.includes('GetSchedule') ||
+                            postData?.includes('GetSchedule') ||
+                            request.url().includes('GetSchedule');
+
+                        if (!matchesScheduleRequest) {
+                            return;
+                        }
+
+                        console.log('Sports411 GetSchedule response seen:', {
+                            url: responseUrl,
+                            method,
+                        });
+
+                        scheduleHandled = true;
+
+                        const scheduleJson = await response.json().catch((err: any): null => {
+                            console.warn('Error parsing Sports411 GetSchedule JSON:', err?.message || err);
+                            return null;
+                        });
+
+                        if (scheduleJson) {
+                            sports411NetworkData = {
+                                scheduleUrl: responseUrl,
+                                scheduleJson,
+                            };
+
+                            try {
+                                const rootKeys = scheduleJson && typeof scheduleJson === 'object' ? Object.keys(scheduleJson) : [];
+                                console.log('Sports411 GetSchedule captured', {
+                                    scheduleUrl: sports411NetworkData.scheduleUrl,
+                                    rootKeys,
+                                });
+                            } catch (logErr: any) {
+                                console.warn('Error logging Sports411 GetSchedule JSON summary:', logErr?.message || logErr);
+                            }
+                        }
+                    } catch (err: any) {
+                        console.warn('Sports411 response handler error:', err?.message || err);
+                    }
+                };
+
+                page.on('response', responseHandler);
+
+                const sports411BaseUrl = new URL(url).origin;
+                console.log('Sports411: first load', { sports411BaseUrl });
+                await page.goto(sports411BaseUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
+                console.log('Sports411: first load done, waiting for authentication hook');
+                await authenticateSports411(page, options);
+                console.log('Sports411: auth hook complete, waiting for page to settle');
+                await sleep(4000);
+
+                console.log('Sports411: navigating to requested URL', { url });
+                await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
+                console.log('Sports411: target navigation done, waiting for network activity');
+                await sleep(4000);
+
+                page.off('response', responseHandler);
+                console.log('Sports411: response listener removed');
             } else {
                 console.log('Generic site: navigating to URL', { url });
 
@@ -343,6 +437,7 @@ export async function scrapeWebsite(req: Request, res: Response) {
                         oddsType,
                         draftKingsNetworkData,
                         betOnlineNetworkData,
+                        sports411NetworkData,
                         options,
                     })
                     : Object.keys(siteScraper)[0];
@@ -364,6 +459,7 @@ export async function scrapeWebsite(req: Request, res: Response) {
                 oddsType,
                 draftKingsNetworkData,
                 betOnlineNetworkData,
+                sports411NetworkData,
                 ...(options as any),
             });
 
@@ -385,6 +481,16 @@ export async function scrapeWebsite(req: Request, res: Response) {
                     });
                 } catch (logErr: any) {
                     console.warn('Error logging BetOnline scraper result summary:', logErr?.message || logErr);
+                }
+            } else if (domain === 'sports411.ag') {
+                try {
+                    console.log('Sports411 scraper result summary:', {
+                        detectedType: type,
+                        hasScheduleJson: !!result?.scheduleJson,
+                        scheduleUrl: result?.scheduleUrl || null,
+                    });
+                } catch (logErr: any) {
+                    console.warn('Error logging Sports411 scraper result summary:', logErr?.message || logErr);
                 }
             }
 
