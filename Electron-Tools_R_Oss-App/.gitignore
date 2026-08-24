@@ -90,3 +90,6 @@ typings/
 
 # Electron-Forge
 out/
+
+# TypeScript compiler output
+dist/

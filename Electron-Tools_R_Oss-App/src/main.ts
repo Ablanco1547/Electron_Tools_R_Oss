@@ -10,6 +10,9 @@ if (started) {
   app.quit();
 }
 
+// Flip to true to have DevTools open automatically on startup
+const OPEN_DEV_TOOLS = true;
+
 let stopLocalScraperServer: (() => void) | undefined;
 let mainWindow: BrowserWindow | null = null;
 
@@ -46,6 +49,10 @@ const createWindow = () => {
     mainWindow.loadFile(
       path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`),
     );
+  }
+
+  if (OPEN_DEV_TOOLS) {
+    mainWindow.webContents.openDevTools();
   }
 
   // Optionally, block common DevTools shortcuts in production

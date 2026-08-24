@@ -10,7 +10,7 @@ export const ODDSCHECKER = {
         ROWS_CLASS: '.BetRow_blvcniz',
         COMPARE_ALL_BUTTON: 'button[aria-label="Compare All Odds"]',
         H1: 'h1',
-        H2: 'h2',
+        H2: 'h4',
     },
     TIMEOUTS: {
         AFTER_CLICK: 5000,
