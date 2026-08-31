@@ -11,7 +11,7 @@ if (started) {
 }
 
 // Flip to true to have DevTools open automatically on startup
-const OPEN_DEV_TOOLS = true;
+const OPEN_DEV_TOOLS = false;
 
 let stopLocalScraperServer: (() => void) | undefined;
 let mainWindow: BrowserWindow | null = null;

@@ -9,6 +9,7 @@ import { exampleSiteScraper } from './exampleScraper';
 import { oddsCheckerScraper } from './oddsCheckerScraper';
 import { bet487Scraper, detectBet487Type } from './bet487Scraper';
 import { sports411Scraper, detectSports411Type } from './sports411Scraper';
+import * as scraperMiscFns from './scraperMiscFunctions';
 
 function getDomain(url: string) {
     const { hostname } = new URL(url);
@@ -39,6 +40,44 @@ function getDomain(url: string) {
 
 function sleep(ms: number) {
     return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// Combines every contest/list scraped in a single request into one merged
+// document so it can be viewed/downloaded as a single list instead of many.
+// Each original list becomes a header row (its title/subtitle, no odds)
+// followed by its own contestant rows, so the merged document reads as
+// repeated "Title / contestant / contestant" groups.
+function mergeContestsIntoSingleDocument(contests: any[], mergedTitle: string) {
+    if (!Array.isArray(contests) || contests.length === 0) {
+        return contests;
+    }
+
+    let rotation = scraperMiscFns.generateRotationNumber();
+    const contestants: any[] = [];
+
+    for (const contest of contests) {
+        const contestantList = Array.isArray(contest?.contestants) ? contest.contestants : [];
+
+        if (!contestantList.length) {
+            continue;
+        }
+
+        const contestLabel = contest?.subtitle ? `${contest.title} - ${contest.subtitle}` : contest?.title;
+
+        contestants.push({ name: contestLabel || 'Untitled', odds: '', rotation: rotation++ });
+
+        for (const contestant of contestantList) {
+            contestants.push({ ...contestant, rotation: rotation++ });
+        }
+    }
+
+    return [
+        {
+            title: mergedTitle,
+            subtitle: '',
+            contestants,
+        },
+    ];
 }
 
 async function scrapeDefault(page: any, { url }: { url: string }) {
@@ -114,10 +153,16 @@ function logErrorToFile(errorInfo: { name: string; message: string; stack: strin
 // Expects body: { url: string, maxOdds: number, order: string, oddsType: string, options?: object }
 export async function scrapeWebsite(req: Request, res: Response) {
     try {
-        const { url, maxOdds, order, oddsType, options = {} } = (req.body || {}) as any;
+        const { url, maxOdds, order, oddsType, scrapeMode = 'contests', options = {} } = (req.body || {}) as any;
 
         if (!url || typeof url !== 'string') {
             return res.status(400).json({ error: 'A valid "url" field is required.' });
+        }
+
+        if (!['contests', 'matchups'].includes(scrapeMode)) {
+            return res.status(400).json({
+                error: 'A valid "scrapeMode" field is required. Must be "contests" or "matchups".',
+            });
         }
 
         if (maxOdds === undefined || typeof maxOdds !== 'number') {
@@ -457,11 +502,20 @@ export async function scrapeWebsite(req: Request, res: Response) {
                 maxOdds,
                 order,
                 oddsType,
+                scrapeMode,
                 draftKingsNetworkData,
                 betOnlineNetworkData,
                 sports411NetworkData,
                 ...(options as any),
             });
+
+            // Matchups mode: sites can opt in to combining every list scraped
+            // in this request into a single merged document. Only DraftKings
+            // does this today; add more domains here as they get their own
+            // matchups logic.
+            if (scrapeMode === 'matchups' && domain === 'draftkings.com' && Array.isArray(result?.contests)) {
+                result.contests = mergeContestsIntoSingleDocument(result.contests, 'DraftKings Matchups');
+            }
 
             if (domain === 'draftkings.com') {
                 try {
@@ -511,6 +565,7 @@ export async function scrapeWebsite(req: Request, res: Response) {
             maxOdds: (req.body as any)?.maxOdds,
             order: (req.body as any)?.order,
             oddsType: (req.body as any)?.oddsType,
+            scrapeMode: (req.body as any)?.scrapeMode,
         };
 
         // Log structured details to console and to a file under the
