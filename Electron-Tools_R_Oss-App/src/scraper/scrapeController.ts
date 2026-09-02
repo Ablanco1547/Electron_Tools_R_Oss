@@ -514,7 +514,9 @@ export async function scrapeWebsite(req: Request, res: Response) {
             // does this today; add more domains here as they get their own
             // matchups logic.
             if (scrapeMode === 'matchups' && domain === 'draftkings.com' && Array.isArray(result?.contests)) {
-                result.contests = mergeContestsIntoSingleDocument(result.contests, 'DraftKings Matchups');
+                const marketTypeName = result?.marketsJson?.markets?.[0]?.marketType?.name;
+                const mergedTitle = typeof marketTypeName === 'string' && marketTypeName.trim() ? marketTypeName.trim() : 'DraftKings Matchups';
+                result.contests = mergeContestsIntoSingleDocument(result.contests, mergedTitle);
             }
 
             if (domain === 'draftkings.com') {
