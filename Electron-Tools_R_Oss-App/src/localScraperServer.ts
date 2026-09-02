@@ -63,6 +63,7 @@ const SUPPORTED_WEBSITES = new Set([
     'sports411.ag',
     'oddschecker.com',
     'example.com',
+    'sportsbook.ag',
 ]);
 
 const DEFAULT_TIMEOUT_MS = 120000;
@@ -94,6 +95,10 @@ function getDomain(url: string): string | null {
 
         if (domain === 'sports411.ag' || domain.endsWith('.sports411.ag')) {
             domain = 'sports411.ag';
+        }
+
+        if (domain === 'sportsbook.ag' || domain.endsWith('.sportsbook.ag')) {
+            domain = 'sportsbook.ag';
         }
 
         return domain;

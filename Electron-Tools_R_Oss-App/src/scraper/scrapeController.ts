@@ -35,6 +35,10 @@ function getDomain(url: string) {
         domain = 'sports411.ag';
     }
 
+    if (domain === 'sportsbook.ag' || domain.endsWith('.sportsbook.ag')) {
+        domain = 'sportsbook.ag';
+    }
+
     return domain;
 }
 
