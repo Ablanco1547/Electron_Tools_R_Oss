@@ -547,6 +547,13 @@ export function startLocalScraperServer(options: LocalScraperServerOptions = {})
 
                     if (!response.ok) {
                         const message = typeof payload.error === 'string' ? payload.error : `Scrape failed with status ${response.status}.`;
+
+                        // Retrying right after a firewall block only prolongs it.
+                        if (payload.code === 'SITE_BLOCKED') {
+                            lastError = message;
+                            break;
+                        }
+
                         throw new Error(message);
                     }
 

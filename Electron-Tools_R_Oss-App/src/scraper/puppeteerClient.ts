@@ -1,5 +1,7 @@
 import puppeteer from 'puppeteer';
 import fs from 'node:fs';
+import path from 'node:path';
+import { app } from 'electron';
 
 function findBrowserExecutable(): string | undefined {
     // Allow overriding via environment variable if needed.
@@ -25,10 +27,27 @@ function findBrowserExecutable(): string | undefined {
     return undefined;
 }
 
+// Persistent profile so cookies set by anti-bot challenges (e.g. firewall
+// clearance cookies) survive between scrapes instead of every run looking
+// like a brand-new visitor.
+function getProfileDir(): string {
+    return path.join(app.getPath('userData'), 'scraper-profile');
+}
+
+// A persistent profile can only be opened by one browser at a time, so
+// serialize jobs instead of letting concurrent requests collide on the lock.
+let jobQueue: Promise<unknown> = Promise.resolve();
+
 // Lightweight wrapper to run a job with a fresh Puppeteer page.
 // This is adapted from Api_Tools_R_Oss/models/misc/puppeteerClient.js
 // so the Electron app can run the same scraping logic locally.
-export async function runWithPage<T>(job: (page: any) => Promise<T>, launchOptions: Record<string, any> = {}): Promise<T> {
+export function runWithPage<T>(job: (page: any) => Promise<T>, launchOptions: Record<string, any> = {}): Promise<T> {
+    const run = jobQueue.then(() => runJob(job, launchOptions));
+    jobQueue = run.catch((): void => undefined);
+    return run;
+}
+
+async function runJob<T>(job: (page: any) => Promise<T>, launchOptions: Record<string, any>): Promise<T> {
     const { args = [], ignoreDefaultArgs, ...rest } = launchOptions;
 
     const executablePath = findBrowserExecutable();
@@ -39,27 +58,24 @@ export async function runWithPage<T>(job: (page: any) => Promise<T>, launchOptio
         );
     }
 
-    // Force Puppeteer to run in headless mode and target the
-    // system-installed Chrome/Edge instead of a managed copy
-    // in the Puppeteer cache (which does not exist on end users).
+    // Launch the system-installed Chrome/Edge (not a Puppeteer-managed copy)
+    // and keep its fingerprint close to a normal user session: real
+    // user-agent, real window size, GPU enabled, persistent profile.
     const browser = await puppeteer.launch({
-        headless: false, // Use 'new' headless mode in supported versions, but allow fallback to 'old' mode.
+        headless: false,
         executablePath,
-        defaultViewport: { width: 2000, height: 9998 },
+        userDataDir: getProfileDir(),
+        // Use the real window size so innerHeight and screen.height stay consistent.
+        defaultViewport: null,
         // Try to reduce obvious automation signals.
         ignoreDefaultArgs: ignoreDefaultArgs ?? ['--enable-automation'],
-        args: [
-
-            '--disable-gpu',
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-            '--disable-blink-features=AutomationControlled',
-            ...args,
-        ],
+        args: ['--start-maximized', '--disable-blink-features=AutomationControlled', ...args],
         ...rest,
     });
 
-    const page = await browser.newPage();
+    // Reuse the tab Chrome opens on startup instead of leaving a stray blank one.
+    const [existingPage] = await browser.pages();
+    const page = existingPage ?? (await browser.newPage());
 
     try {
         // Increase navigation timeouts a bit to handle slower, script-heavy sites.
@@ -73,17 +89,9 @@ export async function runWithPage<T>(job: (page: any) => Promise<T>, launchOptio
         // Non-fatal; older Puppeteer versions may not support these.
     }
 
-    // Match the original user-agent intent.
-    // setUserAgent is deprecated in newer Puppeteer versions, so prefer
-    // setting the header directly instead.
-    try {
-        await page.setExtraHTTPHeaders({
-            'user-agent':
-                '(Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36',
-        });
-    } catch {
-        // Non-fatal; scraping can still proceed with the default headers.
-    }
+    // No user-agent override on purpose: the installed browser's own UA
+    // matches its Sec-CH-UA client hints and navigator.userAgent, and a
+    // mismatch between those is a common bot-detection signal.
 
     try {
         return await job(page);

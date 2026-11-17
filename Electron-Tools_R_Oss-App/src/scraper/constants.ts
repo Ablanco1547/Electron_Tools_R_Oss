@@ -5,9 +5,9 @@
 // OddsChecker selectors and configs
 export const ODDSCHECKER = {
     SELECTORS: {
-        NAMES_CLASS: '.BetRowLeftBetName_b1n9ldp0',
-        ODDS_CLASS: '.OddsCellDesktop_oqljncf',
-        ROWS_CLASS: '.BetRow_blvcniz',
+        NAMES_CLASS: '._BetRowLeftBetName_39fko_8',
+        ODDS_CLASS: '._OddsCellDesktop_oa85w_132',
+        ROWS_CLASS: '._BetRow_mhal4_92',
         COMPARE_ALL_BUTTON: 'button[aria-label="Compare All Odds"]',
         H1: 'h1',
         H2: 'h4',

@@ -46,6 +46,18 @@ function sleep(ms: number) {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// Errors thrown when BetOnline's firewall blocks us start with this prefix so
+// callers can skip immediate retries (which only prolong the block).
+export const BETONLINE_BLOCKED_ERROR_PREFIX = 'BetOnline blocked:';
+
+// Page titles seen on firewall / anti-bot challenge pages.
+function isBetOnlineBlockTitle(title: string) {
+    const t = title.toLowerCase();
+    return ['internal error', 'just a moment', 'attention required', 'access denied', 'request rejected', 'forbidden'].some(
+        (marker) => t.includes(marker),
+    );
+}
+
 // Combines every contest/list scraped in a single request into one merged
 // document so it can be viewed/downloaded as a single list instead of many.
 // Each original list becomes a header row (its title/subtitle, no odds)
@@ -272,6 +284,7 @@ export async function scrapeWebsite(req: Request, res: Response) {
                 betOnlineNetworkData = {
                     contestResponses: [] as any[],
                 };
+                let lastContestResponseAt = 0;
 
                 const responseHandler = async (response: any) => {
                     try {
@@ -298,10 +311,21 @@ export async function scrapeWebsite(req: Request, res: Response) {
                                 });
 
                                 if (json) {
-                                    betOnlineNetworkData.contestResponses.push({
-                                        url: responseUrl,
-                                        json,
-                                    });
+                                    // The same contest can be requested more than once (e.g. on a
+                                    // fallback reload); keep only the latest response per request.
+                                    const postData = typeof request.postData === 'function' ? request.postData() || '' : '';
+                                    const key = `${responseUrl}|${postData}`;
+                                    const existingIndex = betOnlineNetworkData.contestResponses.findIndex(
+                                        (entry: any) => entry.key === key,
+                                    );
+                                    const entry = { key, url: responseUrl, json };
+
+                                    if (existingIndex >= 0) {
+                                        betOnlineNetworkData.contestResponses[existingIndex] = entry;
+                                    } else {
+                                        betOnlineNetworkData.contestResponses.push(entry);
+                                    }
+                                    lastContestResponseAt = Date.now();
 
                                     try {
                                         const summary =
@@ -332,60 +356,99 @@ export async function scrapeWebsite(req: Request, res: Response) {
                     }
                 };
 
-                console.log('BetOnline: first load', { url });
-                await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
-                console.log('BetOnline: first load done, waiting for network activity');
-                await sleep(4000);
+                // Randomized, human-ish waits instead of fixed robotic timings.
+                const humanPause = (minMs: number, maxMs: number) =>
+                    sleep(minMs + Math.floor(Math.random() * (maxMs - minMs)));
 
-                try {
+                const getPageState = async () => {
                     const currentUrl = page.url();
-                    const title = await page.title();
-                    console.log('BetOnline: after first load page state', { currentUrl, title });
+                    const title = String((await page.title().catch((): string => '')) || '');
+                    return { currentUrl, title, blocked: isBetOnlineBlockTitle(title) };
+                };
 
-                    if (title && title.toLowerCase().includes('internal error')) {
-                        const html = await page.content();
-                        console.warn('BetOnline: firewall/internal error detected after first load', {
-                            currentUrl,
-                            title,
-                            bodySnippet: String(html).slice(0, 500),
-                        });
+                // Wait out any firewall/JS challenge instead of reloading on top of it.
+                const waitForChallengeToClear = async (label: string, maxWaitMs: number) => {
+                    const deadline = Date.now() + maxWaitMs;
+                    let state = await getPageState();
+                    while (state.blocked && Date.now() < deadline) {
+                        await sleep(1000);
+                        state = await getPageState();
                     }
-                } catch (stateErr: any) {
-                    console.warn('BetOnline: error while logging page state after first load', stateErr?.message || stateErr);
-                }
+                    console.log(`BetOnline: page state after ${label}`, state);
+                    return state;
+                };
 
-                // Only start capturing contests API responses after the reload, so that
-                // each contest set is captured once (from the final page state) instead
-                // of duplicating first-load and reload traffic.
+                // Wait until contests responses stop arriving (or a hard cap is hit).
+                const waitForContestsToSettle = async (quietMs: number, maxWaitMs: number) => {
+                    const start = Date.now();
+                    while (Date.now() - start < maxWaitMs) {
+                        const lastActivity = lastContestResponseAt || start;
+                        if (Date.now() - lastActivity >= quietMs) return;
+                        await sleep(500);
+                    }
+                };
+
+                const scrollLikeAUser = async () => {
+                    try {
+                        await page.mouse.move(300 + Math.random() * 600, 200 + Math.random() * 300, { steps: 12 });
+                        for (let i = 0; i < 3; i++) {
+                            await page.mouse.wheel({ deltaY: 250 + Math.random() * 250 });
+                            await humanPause(300, 800);
+                        }
+                    } catch {
+                        // Non-fatal; interaction is only to look less robotic.
+                    }
+                };
+
+                // Listen from the very first load so we do not need a forced reload
+                // just to capture the contests traffic. Duplicates are collapsed in
+                // the handler.
                 page.on('response', responseHandler);
 
-                console.log('BetOnline: reloading page');
-                await page
-                    .reload({ waitUntil: 'domcontentloaded', timeout: 60000 })
-                    .catch((err: any) => {
-                        console.warn('BetOnline reload error:', err?.message || err);
-                    });
-                console.log('BetOnline: reload done, waiting for network activity');
-                await sleep(4000);
-
                 try {
-                    const currentUrl = page.url();
-                    const title = await page.title();
-                    console.log('BetOnline: after reload page state', { currentUrl, title });
+                    console.log('BetOnline: first load', { url });
+                    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
 
-                    if (title && title.toLowerCase().includes('internal error')) {
-                        const html = await page.content();
-                        console.warn('BetOnline: firewall/internal error detected after reload', {
-                            currentUrl,
-                            title,
+                    let state = await waitForChallengeToClear('first load', 30000);
+
+                    if (!state.blocked) {
+                        await humanPause(1500, 3000);
+                        await scrollLikeAUser();
+                        await waitForContestsToSettle(3000, 20000);
+
+                        // Fallback: only reload if the first load produced no contests
+                        // traffic at all (and we are not looking at a block page).
+                        if (betOnlineNetworkData.contestResponses.length === 0) {
+                            console.log('BetOnline: no contests captured on first load, reloading once');
+                            await humanPause(2000, 4000);
+                            await page
+                                .reload({ waitUntil: 'domcontentloaded', timeout: 60000 })
+                                .catch((err: any) => {
+                                    console.warn('BetOnline reload error:', err?.message || err);
+                                });
+                            state = await waitForChallengeToClear('reload', 30000);
+                            if (!state.blocked) {
+                                await humanPause(1500, 3000);
+                                await waitForContestsToSettle(3000, 20000);
+                            }
+                        }
+                    }
+
+                    if (state.blocked && betOnlineNetworkData.contestResponses.length === 0) {
+                        const html = await page.content().catch((): string => '');
+                        console.warn('BetOnline: firewall/block page detected', {
+                            ...state,
                             bodySnippet: String(html).slice(0, 500),
                         });
+                        throw new Error(
+                            `${BETONLINE_BLOCKED_ERROR_PREFIX} the site's firewall blocked the scraper (page title: "${state.title}"). ` +
+                                'Wait a few minutes before trying again.',
+                        );
                     }
-                } catch (stateErr: any) {
-                    console.warn('BetOnline: error while logging page state after reload', stateErr?.message || stateErr);
+                } finally {
+                    page.off('response', responseHandler);
                 }
 
-                page.off('response', responseHandler);
                 console.log('BetOnline: response listener removed', {
                     totalContestResponses: betOnlineNetworkData.contestResponses.length,
                 });
@@ -581,9 +644,11 @@ export async function scrapeWebsite(req: Request, res: Response) {
 
         // Also surface basic details back to the caller so the renderer
         // can show or log them while still treating this as a 500.
+        const isBlocked = String(errorInfo.message).startsWith(BETONLINE_BLOCKED_ERROR_PREFIX);
+
         return res.status(500).json({
-            error: 'Failed to scrape website.',
-            code: 'SCRAPER_INTERNAL_ERROR',
+            error: isBlocked ? errorInfo.message : 'Failed to scrape website.',
+            code: isBlocked ? 'SITE_BLOCKED' : 'SCRAPER_INTERNAL_ERROR',
             details: {
                 name: errorInfo.name,
                 message: errorInfo.message,
